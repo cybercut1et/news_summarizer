@@ -1,2 +1,0 @@
-cd news_summarizer\ml
-.\.venv\Scripts\Activate.ps1
