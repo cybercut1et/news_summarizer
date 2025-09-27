@@ -7,6 +7,7 @@ import re
 import json
 
 
+
 from fasttext_classifier import classified_data
 
 
@@ -28,7 +29,7 @@ if __name__ != "__extrsumm__":
     # Применение суммаризации для каждой статьи
     for article in classified_data:
         if article["confidence"] > 0.9:
-            article["content"] = summarize(article["content"], 1)
+            article["content"] = summarize(article["content"], 2)
             filtered_data.append(article)
     with open("classified_test.json", "w", encoding="utf-8") as f:
         json.dump(filtered_data, f, ensure_ascii=False, indent=4)
