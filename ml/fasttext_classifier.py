@@ -1,6 +1,6 @@
 from huggingface_hub import hf_hub_download
 import fasttext
-from test_articles import articles
+import json
 
 class FastTextClassifierPipeline:
     def __init__(self, model_path):
@@ -29,7 +29,15 @@ def pipeline(task="text-classification", model=None):
 # Создание классификатора
 classifier = pipeline("text-classification")
 
-# Использование классификатора
-# for article in articles:
-#     result = classifier(clean_text(article))
-#     print(result)
+def classify(json_file_name):
+    with open(json_file_name, 'r', encoding='utf-8') as file:
+        data = json.load(file)
+    for article in data:
+        content = article["content"].replace('\n', ' ')
+        classication = classifier(content)
+        article["category"] = classifier(content)[0]["label"]
+        article["confidence"] = classifier(content)[0]["score"]
+    return data
+
+classified_data = classify('test.json')
+# print(classified_data)
