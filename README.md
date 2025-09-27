@@ -3,3 +3,7 @@
 
 # Установка нужных модулей:  
 pip install -r requirements.txt
+
+
+
+sdfsdfsfd
