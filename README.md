@@ -65,6 +65,9 @@ news_summarizer/
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── parser/            # Существующие парсеры
+│   └── tg_parser/     # Telegram парсер
+│       ├── parser_prototype.py
+│       └── export.json
 ├── docker-compose.yml
 ├── .env.example
 └── README.md
