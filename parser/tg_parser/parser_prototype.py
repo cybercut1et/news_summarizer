@@ -5,21 +5,19 @@ import asyncio
 from datetime import datetime
 import json
 import pytz
+
 load_dotenv()
-
-time_period = int(input('За сколько часов хотите получить новости: '))
-
 # получаем api приложения
 api_id = os.getenv('API_ID')
 api_hash = os.getenv('API_HASH')
 
+
+time_period = int(input('За сколько часов хотите получить новости: '))
+# получаем текущее время в минутах и текущий день
 current_date = datetime.now().date()
 current_time = datetime.now().time()
 minutes_now = current_time.hour * 60 + current_time.minute
 current_day = current_date.day
-
-print(minutes_now)
-print(current_day)
 # для вывода по часам нужно знать московское время
 moscow_tz = pytz.timezone('Europe/Moscow')
 
@@ -29,12 +27,14 @@ client = TelegramClient('tg_session', api_id, api_hash, system_version='4.16.30-
 async def main():
     dialogs = await client.get_dialogs() # получаем множество диалогов
     export_data = [] # итоговый файл
-    channels_to_parse = ['Взял Мяч', 'Креатив со звездочкой']
-    # среди диалогов ищем нужный нам(для примера канал Взял Мяч)
+
+    channels_to_parse = json.load(open('channels.json', 'r', encoding='utf-8'))['channels']
+
+    # среди диалогов ищем нужный нам
     for dialog in dialogs:
         if dialog.title in channels_to_parse:
             chat_id = dialog.entity.username # юзер тгк
-            messages = await client.get_messages(dialog, limit=10) # пока что достаем 10 последних новостей, чтобы не наглеть
+            messages = await client.get_messages(dialog, limit=20) # пока что достаем 10 последних новостей, чтобы не наглеть
             
             # в export_data будет название канала и последние новости
             parsed_data = {'channel_name': dialog.title, 'messages': []}
@@ -61,6 +61,7 @@ async def main():
                     parsed_data['messages'].append(message_data)
             export_data.append(parsed_data)
 
+    # сохраняем в json
     filename = f'export.json'
     with open(filename, 'w', encoding='utf-8') as f:
         json.dump(export_data, f, ensure_ascii=False, indent=4)
