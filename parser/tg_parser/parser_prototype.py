@@ -13,7 +13,13 @@ time_period = int(input('За сколько часов хотите получ�
 api_id = os.getenv('API_ID')
 api_hash = os.getenv('API_HASH')
 
-current_time = datetime.now()
+current_date = datetime.now().date()
+current_time = datetime.now().time()
+minutes_now = current_time.hour * 60 + current_time.minute
+current_day = current_date.day
+
+print(minutes_now)
+print(current_day)
 # для вывода по часам нужно знать московское время
 moscow_tz = pytz.timezone('Europe/Moscow')
 
@@ -33,16 +39,23 @@ async def main():
             # в export_data будет название канала и последние новости
             parsed_data = {'channel_name': dialog.title, 'messages': []}
             for message in messages:
-                message_publication_time = message.date.astimezone(moscow_tz).isoformat()
+                # считаем время и дату публикации и разбиваем на части
+                message_publication_date_time = message.date.astimezone(moscow_tz).isoformat().split('+')[0] # здесь сплит так как в iso есть часовой пояс, после +
+                message_publication_time = message_publication_date_time.split('T')[1] # время публикации
+                message_publication_date = message_publication_date_time.split('T')[0] # дата публикации
+
+                # считаем день и минуты публикации
+                minutes_publication = int(message_publication_time.split(':')[0]) * 60 + int(message_publication_time.split(':')[1])
+                day_publication = int(message_publication_date.split('-')[2])
 
                 # считаю разницу между временем на компьютере и выпуском поста, если она меньше нужной, то не вывожу
-                request_publication_diff = abs(int(message_publication_time.split('T')[1].split('+')[0].split(':')[0]) - int(current_time.time().hour))
+                request_publication_diff = (minutes_now - minutes_publication) if current_day == day_publication else minutes_now + (1440 - minutes_publication)
                 
-                if (request_publication_diff <= time_period) and (message.text): # здесь идет проверка на message.text, чтобы не было пустых постов
+                if (request_publication_diff <= time_period * 60) and (message.text): # здесь идет проверка на message.text, чтобы не было пустых постов
                     # в message_data текст публикации, датаа выпуска публикации и ссылка на публикацию
                     message_data = { 
                         'text': message.text,
-                        'date': message_publication_time,
+                        'date': message_publication_time.replace('T', ' '),
                         'link' : f'https://t.me/{chat_id}/{message.id}'
                     }
                     parsed_data['messages'].append(message_data)
@@ -50,7 +63,7 @@ async def main():
 
     filename = f'export.json'
     with open(filename, 'w', encoding='utf-8') as f:
-        json.dump(export_data, f, ensure_ascii=False)
+        json.dump(export_data, f, ensure_ascii=False, indent=4)
             
 
 with client:
