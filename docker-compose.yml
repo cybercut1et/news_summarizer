@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./ml:/app/ml
+      - ./backend/news.db:/app/news.db
+    environment:
+      - PORT=8080
+    depends_on:
+      - ml-setup
+
+  ml-setup:
+    build:
+      context: ./ml
+      dockerfile: Dockerfile
+    volumes:
+      - ./ml:/app/ml
+    command: ["python", "-c", "print('ML environment ready')"]
+
+networks:
+  default:
+    driver: bridge
