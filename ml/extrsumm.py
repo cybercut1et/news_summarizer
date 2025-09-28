@@ -27,9 +27,23 @@ def summarize(text, sentence_count):
 if __name__ != "__extrsumm__":
     filtered_data = []
     # Применение суммаризации для каждой статьи
-    for article in classified_data:
-        if article["confidence"] > 0.9:
-            article["content"] = summarize(article["content"], 2)
-            filtered_data.append(article)
+    for channel in classified_data:
+        channel_dict = {
+            "channel_name": channel["channel_name"],
+            "messages": []
+        }
+        for post in channel["messages"]:
+            if post["confidence"] > 0.75:
+                summarized_text = summarize(post["text"], 2)
+                # Оставляем только нужные поля
+                filtered_post = {
+                    "text": summarized_text,
+                    "date": post["date"],
+                    "link": post["link"],
+                    "category": post.get("category"),
+                    "confidence": post.get("confidence")
+                }
+                channel_dict["messages"].append(filtered_post)
+        filtered_data.append(channel_dict)
     with open("classified_test.json", "w", encoding="utf-8") as f:
         json.dump(filtered_data, f, ensure_ascii=False, indent=4)

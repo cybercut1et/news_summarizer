@@ -1,6 +1,7 @@
 from huggingface_hub import hf_hub_download
 import fasttext
 import json
+from pathlib import Path
 
 class FastTextClassifierPipeline:
     def __init__(self, model_path):
@@ -32,12 +33,15 @@ classifier = pipeline("text-classification")
 def classify(json_file_name):
     with open(json_file_name, 'r', encoding='utf-8') as file:
         data = json.load(file)
-    for article in data:
-        content = article["content"].replace('\n', ' ')
-        classication = classifier(content)
-        article["category"] = classifier(content)[0]["label"]
-        article["confidence"] = classifier(content)[0]["score"]
+    for channel in data:
+        for post in channel["messages"]:
+            content = post["text"].replace('\n', ' ')
+            classification = classifier(content)
+            post["category"] = classification[0]["label"]
+            post["confidence"] = classification[0]["score"]
     return data
 
-classified_data = classify('test.json')
+file_path = Path(__file__).parent.parent / 'parser' / 'tg_parser' / 'export.json'
+
+classified_data = classify(str(file_path))
 # print(classified_data)
