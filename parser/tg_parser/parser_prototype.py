@@ -24,7 +24,7 @@ moscow_tz = pytz.timezone('Europe/Moscow')
 # создаем юзербота
 client = TelegramClient('tg_session', api_id, api_hash, system_version='4.16.30-vxhello', device_model='Tecno TECNO CAMON 20 PRO')
 
-async def main():
+async def parse_channels():
     dialogs = await client.get_dialogs() # получаем множество диалогов
     export_data = [] # итоговый файл
 
@@ -56,16 +56,18 @@ async def main():
                     message_data = { 
                         'text': message.text,
                         'date': message_publication_time.replace('T', ' '),
-                        'link' : f'https://t.me/{chat_id}/{message.id}'
+                        'link' : f'https://t.me/{chat_id}/{message.id}' if chat_id is not None else None
                     }
                     parsed_data['messages'].append(message_data)
+                    print(type(chat_id))
             export_data.append(parsed_data)
+    return export_data
 
-    # сохраняем в json
-    filename = f'export.json'
-    with open(filename, 'w', encoding='utf-8') as f:
-        json.dump(export_data, f, ensure_ascii=False, indent=4)
-            
+async def main():
+    async with client:
+        export_data = await parse_channels()
+        with open('export.json', 'w', encoding='utf-8') as f:
+            json.dump(export_data, f, ensure_ascii=False, indent=4)
 
-with client:
-    client.loop.run_until_complete(main())
+if __name__ == '__main__':
+    asyncio.run(main())
