@@ -12,7 +12,7 @@ api_id = os.getenv('API_ID')
 api_hash = os.getenv('API_HASH')
 
 
-time_period = int(input('За сколько часов хотите получить новости: '))
+time_period = json.load(open('time_period.json', 'r'))['hours']
 # получаем текущее время в минутах и текущий день
 current_date = datetime.now().date()
 current_time = datetime.now().time()
