@@ -59,7 +59,6 @@ async def parse_channels():
                         'link' : f'https://t.me/{chat_id}/{message.id}' if chat_id is not None else None
                     }
                     parsed_data['messages'].append(message_data)
-                    print(type(chat_id))
             export_data.append(parsed_data)
     return export_data
 
