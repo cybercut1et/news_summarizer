@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@200..900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="reset.css">
+    <link rel="stylesheet" href="style.css">
+        <title>svitok</title>
+        <style>
+            main > .container {
+                display: flex;
+                align-items: flex-start;
+                gap: 32px;
+            }
+            main article {
+                flex: 1;
+                margin-right: 0;
+            }
+            main aside {
+                width: 300px;
+                min-width: 200px;
+                padding: 16px;
+                border-radius: 8px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            }
+            .search_title {
+                font-weight: bold;
+                font-size: 20px;
+                margin-bottom: 12px;
+            }
+        </style>
+</head>
+<body>
+    <div class="overlay" id="overlay" style="display: none;"></div>
+    <div class="wrapper">
+    <header>
+        <nav> 
+            <div class="header-container">
+            <a class="logo" block href="#">
+                <img src="../frontend/icons/free-icon-old-scroll-17472284.png" class="logo-img" style="width:55px; height: auto;">
+                svitok
+            </a>
+            <div id="loginBtn" class="login-button" block>
+            <button type="button">Вход</button>
+            </div>
+            </div>
+            <div>
+        </nav>
+    </header>
+    
+    <main>
+        
+      <div class="container">
+        <article>
+            
+            <div class="login-form" id="loginModal" style="display: none;">
+            <form action="" id="loginForm"> <!-- вставить в форму ссылку на сервер для обработки реги -->
+                <div class="login-form-back" block>
+                    <div class="log">
+                    <button type="button" id="cancel"> <img src="..\frontend\icons\free-icon-cross-remove-sign-59254.png"style="width:21px; height: auto;"></button>
+                <input type="text" id="username" placeholder="логин" required>
+                <input type="password" id="password" placeholder="пароль" required>
+                <div class="login-button" block>
+                    <button id="login-send" type="submit">Отправить</button>
+                </div>
+                </div>
+                </div>
+            </form>
+
+            </div>
+            <div class="welcome">
+                Привет! О чём узнаем сегодня?
+                </div>
+            <div class="news">
+                <!-- <div class="news_title">
+                    Новости
+                </div> -->
+                <!-- <div class="class-block-news block">
+                    <div class="cat">Категория</div>
+                  
+                    <div class="text">
+                        Текст новости       
+                    </div>
+                    <a class="link" href="#" target="_blank">Перейти в источник</a>
+                     <div class="date">01.01.2001 
+                        <div class="time">22:48</div>
+                    </div>
+                </div> 
+            </div> -->
+        </article>
+        
+        <aside>
+             
+          <div class="seach" block>
+          <div class="search_title" block>
+            <nav>
+            Параметры поиска
+          </nav>
+          </div>
+          <div class="container-url" id="container-url">
+          <div class="url-box" id="first-url">
+          <input type="url"  placeholder="ссылка на ресурс">
+          </div>
+          </div>
+          <div class="plus-and-minus"block>
+              <button type="button" id="minus"><img src="../frontend/icons/free-icon-font-minus-circle-10469730.png" style="width:16px; height: auto ;"></button>
+        <button type="button" id="plus"><img src="../frontend/icons/free-icon-font-add-3914248.png" style="width:16px; height: auto ;"></button>
+            </div>
+          <div class="categories-list">
+           
+                        
+                    <ul>
+                         <div class="categories-list title">Категории</div>
+                        <li> 
+                <button type="button">Глянец</button>
+              
+              </li>
+              <li><button type="button">Здоровье</button></li>
+              <li> <button type="button">Климат</button></li>
+              <li><button type="button">Конфликты</button></li>
+              <li><button type="button">Культура</button></li>  
+              <li><button type="button">Наука</button></li>
+               <li><button type="button">Общество</button></li>
+                <li><button type="button">Политика</button></li>
+                 <li><button type="button">Путешествия</button></li>
+                  <li><button type="button">Спорт</button></li>
+                   <li><button type="button">Экономика</button></li>
+          </ul>
+          </div>
+          <div class="range-box" style="--value: 24;">
+              <label class="range-label" for="tailmetr">
+                Период публикации (ч)
+              </label>
+            
+              <input
+              class="range-input"
+              id="tailmetr"
+              type="range"
+              min="0"
+              max="24"
+              value="24"
+              step="1"
+              >
+             <output
+      class="range-output"
+      id="output"
+      or="tailmetr"
+    >
+      24
+    </output>
+              
+          </div>
+          <div class="login-button" >
+             <button id="apply" type="button">Применить</button>
+            </div>
+            
+            
+          </div>
+        </aside>
+       
+      <!-- </div> -->
+      
+      
+    </main>
+    <footer></footer>
+</div>
+</body>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+<script src="main.js"></script>
+</html>
