@@ -1,3 +1,4 @@
+from telethon.tl.functions.channels import JoinChannelRequest 
 from telethon import TelegramClient
 import os
 from dotenv import load_dotenv
@@ -12,7 +13,7 @@ api_id = os.getenv('API_ID')
 api_hash = os.getenv('API_HASH')
 
 
-time_period = json.load(open('time_period.json', 'r'))['hours']
+time_period = json.load(open('mocks/time_period.json', 'r'))['hours']
 # получаем текущее время в минутах и текущий день
 current_date = datetime.now().date()
 current_time = datetime.now().time()
@@ -24,11 +25,13 @@ moscow_tz = pytz.timezone('Europe/Moscow')
 # создаем юзербота
 client = TelegramClient('tg_session', api_id, api_hash, system_version='4.16.30-vxhello', device_model='Tecno TECNO CAMON 20 PRO')
 
-async def parse_channels():
+async def parse_channels(subbed_channels=[]):
     dialogs = await client.get_dialogs() # получаем множество диалогов
     export_data = [] # итоговый файл
 
-    channels_to_parse = json.load(open('channels.json', 'r', encoding='utf-8'))['channels']
+    # смотрим каналы которые нужно считать, и добавляем туда каналы на которые мы подписались
+    channels_to_parse = json.load(open('mocks/channels.json', 'r', encoding='utf-8'))['channels']
+    channels_to_parse.extend(subbed_channels)
 
     # среди диалогов ищем нужный нам
     for dialog in dialogs:
@@ -62,10 +65,21 @@ async def parse_channels():
             export_data.append(parsed_data)
     return export_data
 
+# функция для подписки ТОЛЬКО на публичные каналы
+async def sub_to_channel(channel_name):
+    await client(JoinChannelRequest(channel_name))
+
 async def main():
     async with client:
+        # считываем каналы из файла и подписываемся на них
+        channels_to_sub = json.load(open('mocks/channels_to_sub.json', 'r', encoding='utf-8'))['channels']
+        for channel in channels_to_sub:
+            await sub_to_channel(channel)
+
+
         export_data = await parse_channels()
-        with open('export.json', 'w', encoding='utf-8') as f:
+
+        with open('mocks/export.json', 'w', encoding='utf-8') as f:
             json.dump(export_data, f, ensure_ascii=False, indent=4)
 
 if __name__ == '__main__':
