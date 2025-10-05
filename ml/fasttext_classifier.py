@@ -30,18 +30,34 @@ def pipeline(task="text-classification", model=None):
 # Создание классификатора
 classifier = pipeline("text-classification")
 
-def classify(json_file_name):
-    with open(json_file_name, 'r', encoding='utf-8') as file:
-        data = json.load(file)
-    for channel in data:
+def classify(tgfile, webfile):
+    data = []
+    with open(tgfile, 'r', encoding='utf-8') as file:
+        tg_data = json.load(file)
+    for channel in tg_data:
         for post in channel["messages"]:
             content = post["text"].replace('\n', ' ')
             classification = classifier(content)
             post["category"] = classification[0]["label"]
             post["confidence"] = classification[0]["score"]
+        data.append(channel)
+    with open(webfile, 'r', encoding='utf-8') as file:
+        web_data = json.load(file)
+    for site in web_data:
+        for article in site["messages"]:
+            content = article["text"].replace('\n', ' ')
+            classification = classifier(content)
+            article["category"] = classification[0]["label"]
+            article["confidence"] = classification[0]["score"]
+        data.append(site)
+#        data.append({"site_name" : site_name, "messages" : [{"category": classification[0]["label"], "confidence": classification[0]["score"]}]})
     return data
 
-file_path = Path(__file__).parent.parent / 'parser' / 'tg_parser' / 'export.json'
+tg_path = Path(__file__).parent.parent / 'parser' / 'tg_parser' / 'mocks' / 'export.json'
+web_path = Path(__file__).parent.parent / 'parser' / 'website_parser' / 'data' / 'all_information.json'
 
-classified_data = classify(str(file_path))
+classified_data = classify(str(tg_path), str(web_path))
+# output_path = Path(__file__).parent / "classified_data.json"
+# with open(output_path, "w", encoding="utf-8") as f:
+#     json.dump(classified_data, f, ensure_ascii=False, indent=4)
 # print(classified_data)
