@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -8,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -87,6 +90,17 @@ func main() {
 
 	// ML эндпоинты
 	api.HandleFunc("/summarize", summarizeText).Methods("POST")
+	// Запуск парсеров/обновления БД (может выполняться асинхронно)
+	api.HandleFunc("/refresh", refreshHandler).Methods("POST")
+
+	// Статические файлы фронтенда
+	frontendDir := filepath.Join("..", "frontend")
+	r.PathPrefix("/frontend/").Handler(http.StripPrefix("/frontend/", http.FileServer(http.Dir(frontendDir))))
+
+	// Redirect с корня на frontend
+	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/frontend/index.html", http.StatusMovedPermanently)
+	})
 
 	// CORS настройки
 	c := cors.New(cors.Options{
@@ -104,7 +118,9 @@ func main() {
 
 	fmt.Printf("Сервер запущен на порту %s\n", port)
 	log.Fatal(http.ListenAndServe(":"+port, handler))
-} // Инициализация базы данных
+}
+
+// Инициализация базы данных
 func initDB() {
 	var err error
 	log.Println("Инициализация базы данных...")
@@ -122,6 +138,10 @@ func initDB() {
 
 	// Создание таблиц
 	createTables()
+	// Настройки для устойчивой параллельной работы
+	_, _ = db.Exec("PRAGMA journal_mode=WAL;")
+	_, _ = db.Exec("PRAGMA busy_timeout=5000;")
+	db.SetMaxOpenConns(1)
 	log.Println("База данных готова к работе")
 }
 
@@ -240,9 +260,9 @@ func getNews(w http.ResponseWriter, r *http.Request) {
 	if limit == "" {
 		limit = "20"
 	}
-
+	// Поддерживаем фильтр по множеству категорий через параметр categories=cat1,cat2
 	source := r.URL.Query().Get("source")
-	category := r.URL.Query().Get("category")
+	categoriesParam := r.URL.Query().Get("categories")
 
 	query := "SELECT id, title, content, summary, source, url, published_at, created_at, category FROM news WHERE 1=1"
 	args := []interface{}{}
@@ -252,9 +272,21 @@ func getNews(w http.ResponseWriter, r *http.Request) {
 		args = append(args, source)
 	}
 
-	if category != "" {
-		query += " AND category = ?"
-		args = append(args, category)
+	if categoriesParam != "" {
+		cats := strings.Split(categoriesParam, ",")
+		// Добавим placeholders для IN (...) 
+		placeholders := make([]string, 0, len(cats))
+		for _, c := range cats {
+			c = strings.TrimSpace(c)
+			if c == "" {
+				continue
+			}
+			placeholders = append(placeholders, "?")
+			args = append(args, c)
+		}
+		if len(placeholders) > 0 {
+			query += " AND category IN (" + strings.Join(placeholders, ",") + ")"
+		}
 	}
 
 	query += " ORDER BY published_at DESC LIMIT ?"
@@ -276,11 +308,150 @@ func getNews(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
+		// Если есть summary — показываем в content (frontend ожидает выжимку)
+		if item.Summary != "" {
+			item.Content = item.Summary
+		}
 		news = append(news, item)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(news)
+}
+
+// Обработчик /api/refresh — запускает парсеры и обновляет БД
+func refreshHandler(w http.ResponseWriter, r *http.Request) {
+	// Опция sync=true позволит дождаться завершения; иначе запускаем асинхронно
+	syncMode := r.URL.Query().Get("sync") == "true"
+	sentences := 2
+	if s := r.URL.Query().Get("sentences"); s != "" {
+		if v, err := strconv.Atoi(s); err == nil && v > 0 {
+			sentences = v
+		}
+	}
+
+	// categories передаем в job через query
+	categories := r.URL.Query().Get("categories")
+
+	if syncMode {
+		// Выполняем синхронно
+		runRefreshJob(categories, sentences)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "completed"})
+		return
+	}
+
+	// Фоново запускаем задачу
+	go func(cats string, sent int) {
+		runRefreshJob(cats, sent)
+	}(categories, sentences)
+
+	w.WriteHeader(http.StatusAccepted)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "accepted"})
+}
+
+// Основная задача обновления: запускаем парсеры, вставляем новости и запускаем backfill суммаризаций
+func runRefreshJob(categories string, sentences int) {
+	log.Printf("Запущена задача refresh (categories=%s, sentences=%d)", categories, sentences)
+
+	// Запускаем парсеры (если есть скрипты в папке parser)
+	parsers := []string{"../parser/tg_parser/parser_prototype.py", "../parser/website_parser/script.py"}
+	for _, p := range parsers {
+		cmd := exec.Command("python", p)
+		cmd.Dir = ""
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Printf("Парсер %s завершился с ошибкой: %v, output: %s", p, err, string(out))
+			continue
+		}
+		log.Printf("Парсер %s выполнен, output: %s", p, string(out))
+	}
+
+	// После парсеров — запускаем чтение их результатов и вставку в БД.
+	// Упростим: парсеры записывают JSON в known locations — website_parser -> data/all_information.json, tg_parser -> mocks/export.json
+	// website
+	websiteFile := "parser/website_parser/data/all_information.json"
+	if b, err := os.ReadFile(websiteFile); err == nil {
+		var arr []map[string]interface{}
+		if err := json.Unmarshal(b, &arr); err == nil {
+			for _, it := range arr {
+				title, _ := it["title"].(string)
+				content, _ := it["content"].(string)
+				url, _ := it["url"].(string)
+				category, _ := it["category"].(string)
+				source := "web"
+				// Генерируем summary сразу (блокируемый, но короткий)
+				summary, err := callPythonSummarizerWithTimeout(content, sentences, 10*time.Second)
+				if err != nil {
+					log.Printf("Ошибка суммаризации web %s: %v", url, err)
+				}
+				query := `INSERT INTO news (title, content, summary, source, url, published_at, category) VALUES (?, ?, ?, ?, ?, ?, ?)`
+				_, err = db.Exec(query, title, content, summary, source, url, nil, category)
+				if err != nil {
+					log.Printf("Не добавлена новость %s: %v", url, err)
+				} else {
+					log.Printf("Вставляем в БД web: %s", url)
+				}
+			}
+		}
+	}
+
+	// tg
+	tgFile := "parser/tg_parser/mocks/export.json"
+	if b, err := os.ReadFile(tgFile); err == nil {
+		var arr []map[string]interface{}
+		if err := json.Unmarshal(b, &arr); err == nil {
+			for _, it := range arr {
+				title, _ := it["title"].(string)
+				content, _ := it["content"].(string)
+				url, _ := it["url"].(string)
+				channel, _ := it["channel"].(string)
+				source := channel
+				summary, err := callPythonSummarizerWithTimeout(content, sentences, 10*time.Second)
+				if err != nil {
+					log.Printf("Ошибка суммаризации tg %s: %v", url, err)
+				}
+				query := `INSERT INTO news (title, content, summary, source, url, published_at, category) VALUES (?, ?, ?, ?, ?, ?, ?)`
+				_, err = db.Exec(query, title, content, summary, source, url, nil, "ТГ")
+				if err != nil {
+					log.Printf("Не добавлена новость (возможно дубликат) %s: %v", url, err)
+				} else {
+					log.Printf("Вставляем в БД TG: %s", url)
+				}
+			}
+		}
+	}
+
+	// Фоновая добивка summary для записей без summary
+	go func() {
+		log.Println("Запускаем backfill summary для существующих записей...")
+		rows, err := db.Query("SELECT id, content FROM news WHERE summary IS NULL OR summary = ''")
+		if err != nil {
+			log.Printf("backfill query error: %v", err)
+			return
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id int
+			var content string
+			if err := rows.Scan(&id, &content); err != nil {
+				continue
+			}
+			log.Printf("backfill: генерируем summary для ID=%d...", id)
+			s, err := callPythonSummarizerWithTimeout(content, sentences, 10*time.Second)
+			if err != nil {
+				log.Printf("backfill summarize error for id=%d: %v", id, err)
+				continue
+			}
+			_, err = db.Exec("UPDATE news SET summary = ? WHERE id = ?", s, id)
+			if err != nil {
+				log.Printf("backfill update error for id=%d: %v", id, err)
+			}
+		}
+	}()
+
+	log.Println("Задача refresh завершена")
 }
 
 // Получение конкретной новости
@@ -335,9 +506,16 @@ func summarizeText(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Неверный формат данных", http.StatusBadRequest)
 		return
 	}
+	// Опционально можно задать количество предложений через query param sentences (default 2)
+	sentences := 2
+	if s := r.URL.Query().Get("sentences"); s != "" {
+		if v, err := strconv.Atoi(s); err == nil && v > 0 {
+			sentences = v
+		}
+	}
 
-	// Вызов Python скрипта для суммаризации
-	summary, err := callPythonSummarizer(req.Content)
+	// Вызов Python скрипта для суммаризации с таймаутом
+	summary, err := callPythonSummarizerWithTimeout(req.Content, sentences, 15*time.Second)
 	if err != nil {
 		log.Printf("Ошибка суммаризации: %v", err)
 		// Fallback - простое сокращение текста
@@ -351,11 +529,11 @@ func summarizeText(w http.ResponseWriter, r *http.Request) {
 }
 
 // Вызов Python скрипта для суммаризации
-func callPythonSummarizer(content string) (string, error) {
+func callPythonSummarizer(content string, sentenceCount int, pythonPath string) (string, error) {
 	// Подготавливаем входные данные для Python скрипта
 	input := map[string]interface{}{
 		"content":        content,
-		"sentence_count": 2,
+		"sentence_count": sentenceCount,
 	}
 
 	inputJSON, err := json.Marshal(input)
@@ -363,20 +541,28 @@ func callPythonSummarizer(content string) (string, error) {
 		return "", fmt.Errorf("ошибка подготовки данных: %v", err)
 	}
 
-	// Выполняем Python скрипт
-	cmd := exec.Command("python", "../ml/summarize.py")
-	cmd.Stdin = strings.NewReader(string(inputJSON))
-
-	output, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("ошибка выполнения Python скрипта: %v", err)
+	mlScript := os.Getenv("ML_SCRIPT_PATH")
+	if mlScript == "" {
+		mlScript = filepath.Join("..", "ml", "summarize.py")
 	}
 
-	// Парсим результат
-	var result map[string]interface{}
-	err = json.Unmarshal(output, &result)
+	// Позволим указать python интерпретатор, иначе попробуем 'python'
+	pythonBin := pythonPath
+	if pythonBin == "" {
+		pythonBin = "python"
+	}
+
+	cmd := exec.Command(pythonBin, mlScript)
+	cmd.Stdin = bytes.NewReader(inputJSON)
+
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("ошибка парсинга результата: %v", err)
+		return "", fmt.Errorf("ошибка выполнения Python скрипта: %v, output: %s", err, string(out))
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(out, &result); err != nil {
+		return "", fmt.Errorf("ошибка парсинга результата: %v, output: %s", err, string(out))
 	}
 
 	if status, ok := result["status"].(string); ok && status == "error" {
@@ -389,6 +575,33 @@ func callPythonSummarizer(content string) (string, error) {
 	}
 
 	return summary, nil
+}
+
+// Вызов суммаризатора с контекстом/таймаутом
+func callPythonSummarizerWithTimeout(content string, sentenceCount int, timeout time.Duration) (string, error) {
+	// Попытаемся использовать ML_PYTHON из окружения (полезно при venv)
+	pythonPath := os.Getenv("ML_PYTHON")
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	type resultT struct {
+		s   string
+		err error
+	}
+
+	ch := make(chan resultT, 1)
+	go func() {
+		s, e := callPythonSummarizer(content, sentenceCount, pythonPath)
+		ch <- resultT{s, e}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return "", fmt.Errorf("summarizer timeout after %v", timeout)
+	case res := <-ch:
+		return res.s, res.err
+	}
 }
 
 func min(a, b int) int {
