@@ -44,6 +44,10 @@ with open("all_news_headers.json") as file:
     all_news = json.load(file)
 
 all_information = []
+result = {
+    "channel_name": url,
+    "messages": []
+}
 count = 0
 
 for category_name, category_href in all_news.items():
@@ -77,19 +81,13 @@ for category_name, category_href in all_news.items():
         article_text = " ".join([p.get_text(strip=True) for p in paragraphs])
 
         # сохраняем в общий словарь
-        post_data = {
-            "site_name": url,
-            "head_name": category_name,
-            "message": [
-                {
-                    "text": article_text,
-                    "date": article_date,
-                    "link": category_href,
-                }
-            ]
-        }
+        result["messages"].append({
+            "text": article_text,
+            "date": article_date,
+            "link": category_href
+        })
 
-        all_information.append(post_data)
+
         # небольшая задержка, чтобы не спамить сервер
         time.sleep(1)
 
@@ -98,6 +96,7 @@ for category_name, category_href in all_news.items():
     except Exception as e:
         print(f"Ошибка при обработке {category_href}: {e}")
 
+all_information.append(result)
 # сохраняем итоговый JSON
 with open("data/all_information.json", "w", encoding="utf-8") as file:
     json.dump(all_information, file, indent=4, ensure_ascii=False)
