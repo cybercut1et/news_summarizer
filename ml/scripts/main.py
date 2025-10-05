@@ -46,6 +46,6 @@ if __name__ == "__main__":
                 }
                 channel_dict["messages"].append(filtered_post)
         filtered_data.append(channel_dict)
-    output_path = Path(__file__).parent / "filtered_data.json"
+    output_path = Path(__file__).parent.parent / "filtered_data.json"
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(filtered_data, f, ensure_ascii=False, indent=4)

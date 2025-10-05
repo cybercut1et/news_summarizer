@@ -53,8 +53,8 @@ def classify(tgfile, webfile):
 #        data.append({"site_name" : site_name, "messages" : [{"category": classification[0]["label"], "confidence": classification[0]["score"]}]})
     return data
 
-tg_path = Path(__file__).parent.parent / 'parser' / 'tg_parser' / 'mocks' / 'export.json'
-web_path = Path(__file__).parent.parent / 'parser' / 'website_parser' / 'data' / 'all_information.json'
+tg_path = Path(__file__).parent.parent.parent / 'parser' / 'tg_parser' / 'mocks' / 'export.json'
+web_path = Path(__file__).parent.parent.parent / 'parser' / 'website_parser' / 'data' / 'all_information.json'
 
 classified_data = classify(str(tg_path), str(web_path))
 # output_path = Path(__file__).parent / "classified_data.json"
