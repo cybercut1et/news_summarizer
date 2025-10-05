@@ -21,7 +21,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./ml:/app/ml
-    command: ["python", "-c", "print('ML environment ready')"]
+    command: ["go", "run", "run.go"]
 
 networks:
   default:

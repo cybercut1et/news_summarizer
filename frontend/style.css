@@ -303,6 +303,15 @@ input[type="url"] {
     background-color:   rgba(119, 119, 238, 0.500); 
     border-radius: 15px;
 }
+
+/* Показывать полный текст новости внутри блока, не обрезать с многоточием */
+.class-block-news .text {
+    white-space: normal;    /* разрешаем перенос строк */
+    overflow: visible;      /* не скрываем содержимое */
+    text-overflow: clip;    /* не использовать многоточие */
+    display: block;
+    word-break: break-word; /* переносить длинные слова */
+}
 .cat
 {
     border: 2px solid black;

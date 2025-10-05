@@ -43,7 +43,11 @@ with open("all_news_headers.json", "w") as file:
 with open("all_news_headers.json") as file:
     all_news = json.load(file)
 
-all_information = {}
+all_information = []
+result = {
+    "channel_name": url,
+    "messages": []
+}
 count = 0
 
 for category_name, category_href in all_news.items():
@@ -65,15 +69,24 @@ for category_name, category_href in all_news.items():
 
         # парсим страницу
         soup = BeautifulSoup(src2, "lxml")
+        date_tag = soup.find("time")
+        if date_tag and date_tag.get("datetime"):
+            article_date = date_tag["datetime"]
+        elif date_tag and date_tag.text.strip():
+            article_date = date_tag.text.strip()
+        else:
+            article_date = None
         # ищем все <p> — обычно там основной текст
         paragraphs = soup.find_all("p")
         article_text = " ".join([p.get_text(strip=True) for p in paragraphs])
 
         # сохраняем в общий словарь
-        all_information[category_name] = {
-            "url": category_href,
-            "text": article_text
-        }
+        result["messages"].append({
+            "text": article_text,
+            "date": article_date,
+            "link": category_href
+        })
+
 
         # небольшая задержка, чтобы не спамить сервер
         time.sleep(1)
@@ -83,6 +96,7 @@ for category_name, category_href in all_news.items():
     except Exception as e:
         print(f"Ошибка при обработке {category_href}: {e}")
 
+all_information.append(result)
 # сохраняем итоговый JSON
 with open("data/all_information.json", "w", encoding="utf-8") as file:
     json.dump(all_information, file, indent=4, ensure_ascii=False)
