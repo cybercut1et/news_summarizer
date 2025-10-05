@@ -24,7 +24,7 @@ def summarize(text, sentence_count):
     summary = summarizer(parser.document, sentence_count)
     return ' '.join(str(sentence) for sentence in summary)
 
-if __name__ != "__extrsumm__":
+if __name__ != "__main__":
     filtered_data = []
     # Применение суммаризации для каждой статьи
     for channel in classified_data:
