@@ -3,8 +3,8 @@ from bs4 import BeautifulSoup
 import json
 import time
 
-# url = "https://www.bbc.com/russian"
-#
+url = "https://www.bbc.com/russian"
+
 headers = {
     "Accept": (
         "text/html,application/xhtml+xml,application/xml;q=0.9,"
@@ -18,29 +18,28 @@ headers = {
     )
 }
 
-# req = requests.get(url, headers=headers)
-# src1 = req.text
-                # Проверяем код страниц
-# print(src1)
-# with open("index.html", "w") as file:
-#     file.write(src)
-# with open("index.html") as file:
-#     src = file.read()
-#
-# soup = BeautifulSoup(src, "lxml")
-# all_links = soup.find_all(class_="bbc-1i4ie53 e1d658bg0")
-#
-# all_news_headers = {}
-# for item in all_links:
-#     item_text = item.text
-#     item_link = item.get("href")
-#
-#     all_news_headers[item_text] = item_link
-#
-# with open("all_news_headers.json", "w") as file:
-#                 # Сохраняем все заголовки в json файл
-#     json.dump(all_news_headers, file, indent=4, ensure_ascii=False)
-#
+req = requests.get(url, headers=headers)
+src1 = req.text
+
+with open("index.html", "w") as file:
+    file.write(src1)
+with open("index.html") as file:
+    src = file.read()
+
+soup = BeautifulSoup(src, "lxml")
+all_links = soup.find_all(class_="bbc-1i4ie53 e1d658bg0")
+
+all_news_headers = {}
+for item in all_links:
+    item_text = item.text
+    item_link = item.get("href")
+
+    all_news_headers[item_text] = item_link
+
+with open("all_news_headers.json", "w") as file:
+                # Сохраняем все заголовки в json файл
+    json.dump(all_news_headers, file, indent=4, ensure_ascii=False)
+
 with open("all_news_headers.json") as file:
     all_news = json.load(file)
 
@@ -63,10 +62,6 @@ for category_name, category_href in all_news.items():
         # получаем HTML статьи
         req = requests.get(url=category_href, headers=headers)
         src2 = req.text
-
-        # сохраняем HTML копию (по желанию)
-        with open(f"data/{count}_{safe_name}.html", "w", encoding="utf-8") as file:
-            file.write(src2)
 
         # парсим страницу
         soup = BeautifulSoup(src2, "lxml")
