@@ -65,9 +65,47 @@ async def parse_channels(subbed_channels=[]):
             export_data.append(parsed_data)
     return export_data
 
-# функция для подписки ТОЛЬКО на публичные каналы
+# функция для подписки на каналы и добавления их в список для парсинга
 async def sub_to_channel(channel_name):
-    await client(JoinChannelRequest(channel_name))
+    try:
+        # Получаем информацию о канале и подписываемся
+        channel_entity = await client.get_entity(channel_name)
+        await client(JoinChannelRequest(channel_entity))
+        
+        # Получаем название канала
+        channel_title = channel_entity.title
+        
+        # Добавляем канал в список для парсинга
+        try:
+            # Читаем текущий список каналов для парсинга
+            with open('mocks/channels.json', 'r', encoding='utf-8') as f:
+                channels_data = json.load(f)
+            
+            # Добавляем новый канал если его еще нет
+            if channel_title not in channels_data['channels']:
+                channels_data['channels'].append(channel_title)
+                with open('mocks/channels.json', 'w', encoding='utf-8') as f:
+                    json.dump(channels_data, f, ensure_ascii=False, indent=4)
+                print(f"Успешно подписались на канал '{channel_title}' и добавили его в список для парсинга")
+            else:
+                print(f"Канал '{channel_title}' уже есть в списке для парсинга")
+            
+            # Удаляем канал из списка для подписки
+            with open('mocks/channels_to_sub.json', 'r', encoding='utf-8') as f:
+                channels_to_sub_data = json.load(f)
+            
+            if channel_name in channels_to_sub_data['channels']:
+                channels_to_sub_data['channels'].remove(channel_name)
+                with open('mocks/channels_to_sub.json', 'w', encoding='utf-8') as f:
+                    json.dump(channels_to_sub_data, f, ensure_ascii=False, indent=4)
+                print(f"Канал '{channel_name}' удален из списка для подписки")
+                
+        except Exception as e:
+            print(f"Подписались на канал '{channel_title}', но произошла ошибка при обновлении списков: {str(e)}")
+            
+    except Exception as e:
+        print(f"Ошибка при подписке на канал {channel_name}: {str(e)}")
+        raise e
 
 async def main():
     async with client:
