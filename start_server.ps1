@@ -33,6 +33,27 @@ Write-Host "  Frontend: http://localhost:8081/" -ForegroundColor White
 Write-Host "  API: http://localhost:8081/api/news" -ForegroundColor White
 Write-Host "`nНажмите Ctrl+C для остановки сервера`n" -ForegroundColor Yellow
 
-# Переход в директорию backend и запуск
+# Переход в директорию backend
 Set-Location $backendPath
-go run main.go
+
+# Проверяем наличие Go
+$goPath = "D:\go\bin\go.exe"
+if (Test-Path $goPath) {
+    Write-Host "Компилируем сервер с пайплайном..." -ForegroundColor Yellow
+    $env:PATH += ";D:\go\bin"
+    $env:GOPATH = "D:\go-workspace"
+    $env:GOMODCACHE = "D:\go-workspace\pkg\mod"
+    
+    # Компилируем новую версию с пайплайном
+    & $goPath build -o main_pipeline.exe main.go
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "✅ Компиляция успешна" -ForegroundColor Green
+        & ".\main_pipeline.exe"
+    } else {
+        Write-Host "❌ Ошибка компиляции, запускаем старую версию" -ForegroundColor Red
+        & ".\main.exe"
+    }
+} else {
+    Write-Host "Go не найден, запускаем существующий main.exe" -ForegroundColor Yellow
+    & ".\main.exe"
+}
