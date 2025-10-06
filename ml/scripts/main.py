@@ -5,6 +5,7 @@ from sumy.summarizers.lsa import LsaSummarizer
 from sumy.summarizers.text_rank import TextRankSummarizer
 import re
 import json
+from pathlib import Path
 
 
 
@@ -24,7 +25,7 @@ def summarize(text, sentence_count):
     summary = summarizer(parser.document, sentence_count)
     return ' '.join(str(sentence) for sentence in summary)
 
-if __name__ != "__main__":
+if __name__ == "__main__":
     filtered_data = []
     # Применение суммаризации для каждой статьи
     for channel in classified_data:
@@ -45,5 +46,6 @@ if __name__ != "__main__":
                 }
                 channel_dict["messages"].append(filtered_post)
         filtered_data.append(channel_dict)
-    with open("classified_test.json", "w", encoding="utf-8") as f:
+    output_path = Path(__file__).parent.parent / "filtered_data.json"
+    with open(output_path, "w", encoding="utf-8") as f:
         json.dump(filtered_data, f, ensure_ascii=False, indent=4)
