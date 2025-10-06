@@ -80,8 +80,11 @@ for category_name, category_href in all_news.items():
         paragraphs = soup.find_all("p")
         article_text = " ".join([p.get_text(strip=True) for p in paragraphs])
 
+
+
         # сохраняем в общий словарь
         result["messages"].append({
+            "header": category_name,
             "text": article_text,
             "date": article_date,
             "link": category_href
