@@ -6,6 +6,12 @@ import asyncio
 from datetime import datetime
 import json
 import pytz
+from pathlib import Path
+
+CHANNELS_TO_SUB = Path('mocks/channels_to_sub.json')
+CHANNELS = Path('mocks/channels.json')
+EXPORT = Path('mocks/export.json')
+TIME_PERIOD = Path('mocks/time_period.json')
 
 load_dotenv()
 # получаем api приложения
@@ -13,7 +19,7 @@ api_id = os.getenv('API_ID')
 api_hash = os.getenv('API_HASH')
 
 
-time_period = json.load(open('mocks/time_period.json', 'r'))['hours']
+time_period = json.load(open(TIME_PERIOD, 'r'))['hours']
 # получаем текущее время в минутах и текущий день
 current_date = datetime.now().date()
 current_time = datetime.now().time()
@@ -30,7 +36,7 @@ async def parse_channels(subbed_channels=[]):
     export_data = [] # итоговый файл
 
     # смотрим каналы которые нужно считать, и добавляем туда каналы на которые мы подписались
-    channels_to_parse = json.load(open('mocks/channels.json', 'r', encoding='utf-8'))['channels']
+    channels_to_parse = json.load(open(CHANNELS, 'r', encoding='utf-8'))['channels']
     channels_to_parse.extend(subbed_channels)
 
     # среди диалогов ищем нужный нам
@@ -78,25 +84,25 @@ async def sub_to_channel(channel_name):
         # Добавляем канал в список для парсинга
         try:
             # Читаем текущий список каналов для парсинга
-            with open('mocks/channels.json', 'r', encoding='utf-8') as f:
+            with open(CHANNELS, 'r', encoding='utf-8') as f:
                 channels_data = json.load(f)
             
             # Добавляем новый канал если его еще нет
             if channel_title not in channels_data['channels']:
                 channels_data['channels'].append(channel_title)
-                with open('mocks/channels.json', 'w', encoding='utf-8') as f:
+                with open(CHANNELS, 'w', encoding='utf-8') as f:
                     json.dump(channels_data, f, ensure_ascii=False, indent=4)
                 print(f"Успешно подписались на канал '{channel_title}' и добавили его в список для парсинга")
             else:
                 print(f"Канал '{channel_title}' уже есть в списке для парсинга")
             
             # Удаляем канал из списка для подписки
-            with open('mocks/channels_to_sub.json', 'r', encoding='utf-8') as f:
+            with open(CHANNELS_TO_SUB, 'r', encoding='utf-8') as f:
                 channels_to_sub_data = json.load(f)
             
             if channel_name in channels_to_sub_data['channels']:
                 channels_to_sub_data['channels'].remove(channel_name)
-                with open('mocks/channels_to_sub.json', 'w', encoding='utf-8') as f:
+                with open(CHANNELS_TO_SUB, 'w', encoding='utf-8') as f:
                     json.dump(channels_to_sub_data, f, ensure_ascii=False, indent=4)
                 print(f"Канал '{channel_name}' удален из списка для подписки")
                 
@@ -110,14 +116,14 @@ async def sub_to_channel(channel_name):
 async def main():
     async with client:
         # считываем каналы из файла и подписываемся на них
-        channels_to_sub = json.load(open('mocks/channels_to_sub.json', 'r', encoding='utf-8'))['channels']
+        channels_to_sub = json.load(open(CHANNELS_TO_SUB, 'r', encoding='utf-8'))['channels']
         for channel in channels_to_sub:
             await sub_to_channel(channel)
 
 
         export_data = await parse_channels()
 
-        with open('mocks/export.json', 'w', encoding='utf-8') as f:
+        with open(EXPORT, 'w', encoding='utf-8') as f:
             json.dump(export_data, f, ensure_ascii=False, indent=4)
 
 if __name__ == '__main__':
