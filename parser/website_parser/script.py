@@ -29,7 +29,7 @@ async def fetch_text(session: aiohttp.ClientSession, url: str, retries: int = 3)
                 return await resp.text()
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             if attempt < retries - 1:
-                print(f"⚠️ Ошибка {type(e).__name__} при загрузке {url}, попытка {attempt + 1}/{retries}...")
+                print(f" Ошибка {type(e).__name__} при загрузке {url}, попытка {attempt + 1}/{retries}...")
                 await asyncio.sleep(2 * (attempt + 1))
                 continue
             else:
@@ -125,7 +125,7 @@ async def main():
 
     async with aiohttp.ClientSession(connector=connector) as session:
         articles = await parse_rss(session)
-        print(f"🔍 Найдено {len(articles)} статей в RSS. Загружаем тексты...")
+        print(f"Найдено {len(articles)} статей в RSS. Загружаем тексты...")
 
         tasks = [fetch_article(session, t, l, sem) for t, l in articles]
         results = await asyncio.gather(*tasks)
@@ -139,7 +139,7 @@ async def main():
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(all_information, f, ensure_ascii=False, indent=4)
 
-    print(f"✅ Готово! Сохранено {len(results)} статей в {out_path}")
+    print(f"Готово! Сохранено {len(results)} статей в {out_path}")
 
 
 if __name__ == "__main__":
