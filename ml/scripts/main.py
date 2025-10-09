@@ -50,3 +50,22 @@ def do_shit():
         json.dump(filtered_data, f, ensure_ascii=False, indent=4)
 
 do_shit()
+if __name__ == "__main__":
+    import sys
+    try:
+        # Если скрипт вызывается с аргументом или через stdin
+        if not sys.stdin.isatty():
+            input_json = sys.stdin.read()
+            try:
+                data = json.loads(input_json)
+                text = data.get("content", "")
+                sentence_count = int(data.get("sentence_count", 2))
+                summary_text = summarize(text, sentence_count)
+                print(json.dumps({"summary": summary_text, "status": "ok"}, ensure_ascii=False))
+            except Exception as e:
+                print(json.dumps({"status": "error", "error": str(e)}))
+        else:
+            # Обычный запуск для генерации filtered_data.json
+            do_shit()
+    except Exception as e:
+        print(json.dumps({"status": "error", "error": str(e)}))

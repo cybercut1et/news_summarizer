@@ -40,7 +40,10 @@ document.addEventListener('DOMContentLoaded', () => {
   if (plusBtn) plusBtn.addEventListener('click', () => { const d = document.createElement('div'); d.className = 'url-box'; d.innerHTML = '<input type="url" placeholder="ссылка на ресурс">'; if (containerUrl) containerUrl.appendChild(d); });
   if (minusBtn) minusBtn.addEventListener('click', () => { const windows = document.querySelectorAll('.url-box'); if (windows.length > 1) { const last = windows[windows.length-1]; last.remove(); } });
 
-  document.querySelectorAll('.categories-list button').forEach(b => b.addEventListener('click', () => b.classList.toggle('active')));
+  document.querySelectorAll('.categories-list button').forEach(b => b.addEventListener('click', () => {
+    b.classList.toggle('active');
+    renderFilteredNews();
+  }));
 
   const range = document.querySelector('.range-input'); if (range) range.addEventListener('input', (e) => { e.target.parentNode.parentNode.style.setProperty('--value', e.target.value); if (e.target.nextElementSibling) e.target.nextElementSibling.value = e.target.value; });
 
@@ -141,11 +144,12 @@ document.addEventListener('DOMContentLoaded', () => {
   function collectFiltersData() { 
     const urls = []; 
     if (containerUrl) containerUrl.querySelectorAll('input[type="url"]').forEach(i => { if (i.value.trim()) urls.push(i.value.trim()); }); 
-    const cats = []; 
-    document.querySelectorAll('.categories-list button.active').forEach(b => cats.push(b.textContent.trim())); 
+    // Маппим выбранные русские категории к английским
+    const catsRu = Array.from(document.querySelectorAll('.categories-list button.active')).map(b => b.textContent.trim().toLowerCase());
+    const catsEn = catsRu.map(cat => categoryMap[cat]).filter(Boolean);
     const periodEl = document.getElementById('tailmetr'); 
     const period = periodEl ? parseInt(periodEl.value) : 24; 
-    return { urls, categories: cats, period }; 
+    return { urls, categories: catsEn, period }; 
   }
 
   function loadNews(page = 1) {
@@ -265,8 +269,71 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  let allNewsData = [];
+
+  function fetchFilteredData() {
+    return fetch('/ml/filtered_data.json')
+      .then(r => r.json())
+      .then(data => {
+        allNewsData = [];
+        data.forEach(channel => {
+          channel.messages.forEach(msg => {
+            allNewsData.push({
+              channel_name: channel.channel_name,
+              ...msg
+            });
+          });
+        });
+        renderFilteredNews();
+      })
+      .catch(err => {
+        console.error('Ошибка загрузки filtered_data.json:', err);
+        document.querySelector('.news').innerHTML = '<div style="color:red">Ошибка загрузки новостей</div>';
+      });
+  }
+
+
+  // Маппинг русских названий категорий к английским значениям из filtered_data.json
+  const categoryMap = {
+    'глянец': 'gloss',
+    'здоровье': 'health',
+    'климат': 'climate',
+    'конфликты': 'conflicts',
+    'культура': 'culture',
+    'экономика': 'economy',
+    'наука': 'science',
+    'общество': 'society',
+    'политика': 'politics',
+    'спорт': 'sports',
+    'путешествия': 'travel'
+  };
+
+  function renderFilteredNews() {
+    const activeCatsRu = Array.from(document.querySelectorAll('.categories-list button.active')).map(b => b.textContent.trim().toLowerCase());
+    // Маппим выбранные русские категории к английским
+    const activeCatsEn = activeCatsRu.map(cat => categoryMap[cat]).filter(Boolean);
+    let filtered = allNewsData;
+    if (activeCatsEn.length > 0) {
+      filtered = filtered.filter(n => n.category && activeCatsEn.includes(n.category.toLowerCase()));
+    }
+    // Если ни одна категория не выбрана, показываем все новости
+    const container = document.querySelector('.news');
+    container.innerHTML = '';
+    if (filtered.length === 0) {
+      container.innerHTML = '<div style="color:gray">Нет новостей по выбранным категориям</div>';
+      return;
+    }
+    filtered.forEach(item => {
+      const block = document.createElement('div');
+      block.className = 'class-block-news';
+      block.innerHTML = `${item.category ? `<div class="cat">${item.category}</div>` : ''}<div class="text">${item.text}</div>${item.link ? `<a class="link" href="${item.link}" target="_blank">Перейти в источник</a>` : ''}`;
+      container.appendChild(block);
+    });
+  }
+
   updateAuthButton();
   
   // Проверяем статус пайплайна при загрузке страницы
   setTimeout(() => checkPipelineStatus(), 500);
+  fetchFilteredData();
 });

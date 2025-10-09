@@ -3,6 +3,10 @@ import asyncio
 import aiohttp
 import json
 import os
+import sys
+if sys.platform == "win32":
+    import codecs
+    sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
 from bs4 import BeautifulSoup
 from aiohttp import ClientTimeout
 from urllib.parse import urljoin

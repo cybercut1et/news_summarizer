@@ -1,3 +1,4 @@
+chcp 65001 > $null
 # Скрипт запуска сервера новостного агрегатора
 Write-Host "=== Запуск News Summarizer ===" -ForegroundColor Cyan
 
