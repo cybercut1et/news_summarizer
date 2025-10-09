@@ -25,4 +25,8 @@ Thumbs.db
 *.swp
 *.swo
 
+# Telegram session files
+parser/tg_parser/tg_session.session
+*.session
+
 .env

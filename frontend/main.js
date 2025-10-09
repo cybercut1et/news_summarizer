@@ -6,6 +6,12 @@ const loginForm = document.getElementById('loginForm');
 const overlay = document.getElementById('overlay');
 const usernameInput = document.getElementById('username');
 const passwordInput = document.getElementById('password');
+
+// Глобальные переменные для пагинации
+let currentPage = 1;
+let totalPages = 1;
+let currentFilters = {};
+
 // frontend/main.js — compact and valid
 document.addEventListener('DOMContentLoaded', () => {
   const loginBtn = document.getElementById('loginBtn');
@@ -50,12 +56,101 @@ document.addEventListener('DOMContentLoaded', () => {
     if (container) container.appendChild(block);
   }
 
-  function createMultipleNewsBlocks(arr) { const container = document.querySelector('.news'); if (!container) return; container.innerHTML = ''; arr.forEach(createNewsBlock); }
+  function createMultipleNewsBlocks(data) { 
+    const container = document.querySelector('.news'); 
+    if (!container) return; 
+    container.innerHTML = '';
+    
+    // Если данные содержат пагинацию
+    if (data.news && Array.isArray(data.news)) {
+      data.news.forEach(createNewsBlock);
+      updatePagination(data.pagination);
+    } else if (Array.isArray(data)) {
+      // Старый формат без пагинации
+      data.forEach(createNewsBlock);
+      hidePagination();
+    }
+  }
 
-  function collectFiltersData() { const urls = []; if (containerUrl) containerUrl.querySelectorAll('input[type="url"]').forEach(i => { if (i.value.trim()) urls.push(i.value.trim()); }); const cats = []; document.querySelectorAll('.categories-list button.active').forEach(b => cats.push(b.textContent.trim())); const periodEl = document.getElementById('tailmetr'); const period = periodEl ? parseInt(periodEl.value) : 24; return { urls, categories: cats, period }; }
+  function updatePagination(pagination) {
+    if (!pagination) {
+      hidePagination();
+      return;
+    }
 
-  function loadNews() {
+    currentPage = pagination.currentPage;
+    totalPages = pagination.totalPages;
+
+    const paginationContainer = document.getElementById('pagination');
+    const paginationInfo = document.getElementById('pagination-info-text');
+    const prevBtn = document.getElementById('prev-page');
+    const nextBtn = document.getElementById('next-page');
+    const pageNumbers = document.getElementById('page-numbers');
+
+    if (!paginationContainer) return;
+
+    // Показываем пагинацию только если больше одной страницы
+    if (totalPages <= 1) {
+      hidePagination();
+      return;
+    }
+
+    paginationContainer.style.display = 'block';
+
+    // Обновляем информацию
+    const start = (currentPage - 1) * pagination.limit + 1;
+    const end = Math.min(currentPage * pagination.limit, pagination.totalItems);
+    paginationInfo.textContent = `Показано ${start}-${end} из ${pagination.totalItems} новостей`;
+
+    // Обновляем кнопки навигации
+    prevBtn.disabled = !pagination.hasPrev;
+    nextBtn.disabled = !pagination.hasNext;
+
+    // Генерируем номера страниц
+    pageNumbers.innerHTML = '';
+    const maxVisiblePages = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+    if (endPage - startPage < maxVisiblePages - 1) {
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      const pageBtn = document.createElement('button');
+      pageBtn.textContent = i;
+      pageBtn.type = 'button';
+      pageBtn.className = i === currentPage ? 'active' : '';
+      pageBtn.addEventListener('click', () => loadNewsPage(i));
+      pageNumbers.appendChild(pageBtn);
+    }
+  }
+
+  function hidePagination() {
+    const paginationContainer = document.getElementById('pagination');
+    if (paginationContainer) {
+      paginationContainer.style.display = 'none';
+    }
+  }
+
+  function loadNewsPage(page = 1) {
+    currentPage = page;
+    loadNews(currentPage);
+  }
+
+  function collectFiltersData() { 
+    const urls = []; 
+    if (containerUrl) containerUrl.querySelectorAll('input[type="url"]').forEach(i => { if (i.value.trim()) urls.push(i.value.trim()); }); 
+    const cats = []; 
+    document.querySelectorAll('.categories-list button.active').forEach(b => cats.push(b.textContent.trim())); 
+    const periodEl = document.getElementById('tailmetr'); 
+    const period = periodEl ? parseInt(periodEl.value) : 24; 
+    return { urls, categories: cats, period }; 
+  }
+
+  function loadNews(page = 1) {
     const filters = collectFiltersData(); 
+    currentFilters = filters; // Сохраняем текущие фильтры
     const welcome = document.querySelector('.welcome'); 
     if (welcome) welcome.style.display = 'none'; 
     showLoading(true);
@@ -65,6 +160,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const sentencesSelect = document.getElementById('sentences-select');
     const sentences = (sentencesSelect && sentencesSelect.value) ? sentencesSelect.value : '2';
     params.set('sentences', sentences);
+    params.set('page', page.toString());
+    params.set('limit', '10'); // Устанавливаем лимит в 10 новостей на страницу
 
     fetch('/api/news?' + params.toString())
       .then(r => { if (!r.ok) throw new Error('news fetch failed'); return r.json(); })
@@ -73,12 +170,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.status === 'loading') {
           // Показываем статус пайплайна и проверяем снова
           updateLoadingStatus(data.pipeline_status || 'Обработка данных...');
-          setTimeout(() => loadNews(), 2000); // Проверяем каждые 2 секунды
+          setTimeout(() => loadNews(page), 2000); // Проверяем каждые 2 секунды
           return;
         }
         
         showLoading(false); 
-        if (Array.isArray(data) && data.length > 0) {
+        if ((data.news && Array.isArray(data.news) && data.news.length > 0) || (Array.isArray(data) && data.length > 0)) {
           createMultipleNewsBlocks(data);
         } else {
           const w = document.querySelector('.welcome');
@@ -86,9 +183,10 @@ document.addEventListener('DOMContentLoaded', () => {
             w.innerHTML = 'Новостей не найдено. Данные обрабатываются...';
             w.style.display = 'block';
           }
+          hidePagination();
         }
       })
-      .catch(err => { showLoading(false); console.error(err); alert('Ошибка при загрузке новостей'); });
+      .catch(err => { showLoading(false); hidePagination(); console.error(err); alert('Ошибка при загрузке новостей'); });
   }
 
   function updateLoadingStatus(status) {
@@ -98,7 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function checkPipelineStatus() {
+      function checkPipelineStatus() {
     fetch('/api/pipeline/status')
       .then(r => r.json())
       .then(status => {
@@ -106,14 +204,35 @@ document.addEventListener('DOMContentLoaded', () => {
           updateLoadingStatus(status.step || 'Обработка данных...');
           setTimeout(() => checkPipelineStatus(), 1000);
         } else if (status.dataReady) {
-          loadNews(); // Данные готовы, загружаем новости
+          loadNews(1); // Данные готовы, загружаем первую страницу новостей
         }
       })
       .catch(err => console.error('Ошибка проверки статуса:', err));
   }
 
+  // Обработчики для кнопок пагинации
+  const prevBtn = document.getElementById('prev-page');
+  const nextBtn = document.getElementById('next-page');
+  
+  if (prevBtn) {
+    prevBtn.addEventListener('click', () => {
+      if (currentPage > 1) {
+        loadNewsPage(currentPage - 1);
+      }
+    });
+  }
+  
+  if (nextBtn) {
+    nextBtn.addEventListener('click', () => {
+      if (currentPage < totalPages) {
+        loadNewsPage(currentPage + 1);
+      }
+    });
+  }
+
   if (apply) {
     apply.addEventListener('click', () => {
+      currentPage = 1; // Сбрасываем на первую страницу при применении фильтров
       const filters = collectFiltersData(); 
       const welcome = document.querySelector('.welcome'); 
       if (welcome) welcome.style.display = 'none'; 
@@ -127,10 +246,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
       fetch('/api/refresh?' + params.toString(), { method: 'POST' })
         .then(r => { if (!r.ok) throw new Error('refresh failed'); return r.json(); })
-        .then(() => fetch('/api/news?' + params.toString()))
+        .then(() => {
+          // После обновления загружаем первую страницу
+          const newsParams = new URLSearchParams();
+          if (filters.categories && filters.categories.length) newsParams.set('categories', filters.categories.join(','));
+          newsParams.set('sentences', sentences);
+          newsParams.set('page', '1');
+          newsParams.set('limit', '10');
+          
+          return fetch('/api/news?' + newsParams.toString());
+        })
         .then(r => { if (!r.ok) throw new Error('news fetch failed'); return r.json(); })
-        .then(news => { showLoading(false); createMultipleNewsBlocks(Array.isArray(news) ? news : []); })
-        .catch(err => { showLoading(false); console.error(err); alert('Ошибка при обновлении новостей'); });
+        .then(data => { 
+          showLoading(false); 
+          createMultipleNewsBlocks(data);
+        })
+        .catch(err => { showLoading(false); hidePagination(); console.error(err); alert('Ошибка при обновлении новостей'); });
     });
   }
 

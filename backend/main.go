@@ -458,6 +458,15 @@ func getNews(w http.ResponseWriter, r *http.Request) {
 	}
 	limitInt, _ := strconv.Atoi(limit)
 	
+	page := r.URL.Query().Get("page")
+	if page == "" {
+		page = "1"
+	}
+	pageInt, _ := strconv.Atoi(page)
+	if pageInt < 1 {
+		pageInt = 1
+	}
+	
 	categoriesParam := r.URL.Query().Get("categories")
 	var filterCategories []string
 	if categoriesParam != "" {
@@ -468,25 +477,12 @@ func getNews(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	// Преобразуем в формат NewsItem
-	var news []NewsItem
+	var allNews []NewsItem
+	var filteredNews []NewsItem
 	id := 1
 	
 	for _, channel := range filteredData {
 		for _, message := range channel.Messages {
-			// Фильтруем по категориям если указаны
-			if len(filterCategories) > 0 {
-				categoryMatch := false
-				for _, cat := range filterCategories {
-					if strings.EqualFold(message.Category, cat) {
-						categoryMatch = true
-						break
-					}
-				}
-				if !categoryMatch {
-					continue
-				}
-			}
-			
 			// Создаем NewsItem
 			item := NewsItem{
 				ID:       id,
@@ -511,21 +507,63 @@ func getNews(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			
-			news = append(news, item)
+			allNews = append(allNews, item)
 			id++
-			
-			// Ограничиваем количество
-			if len(news) >= limitInt {
-				break
+		}
+	}
+	
+	// Фильтруем по категориям если указаны
+	if len(filterCategories) > 0 {
+		for _, item := range allNews {
+			categoryMatch := false
+			for _, cat := range filterCategories {
+				if strings.EqualFold(item.Category, cat) {
+					categoryMatch = true
+					break
+				}
+			}
+			if categoryMatch {
+				filteredNews = append(filteredNews, item)
 			}
 		}
-		if len(news) >= limitInt {
-			break
-		}
+	} else {
+		filteredNews = allNews
+	}
+	
+	// Рассчитываем пагинацию
+	totalItems := len(filteredNews)
+	totalPages := (totalItems + limitInt - 1) / limitInt
+	startIndex := (pageInt - 1) * limitInt
+	endIndex := startIndex + limitInt
+	
+	if startIndex >= totalItems {
+		startIndex = totalItems
+	}
+	if endIndex > totalItems {
+		endIndex = totalItems
+	}
+	
+	// Получаем новости для текущей страницы
+	var paginatedNews []NewsItem
+	if startIndex < endIndex {
+		paginatedNews = filteredNews[startIndex:endIndex]
+	}
+	
+	// Формируем ответ с информацией о пагинации
+	response := map[string]interface{}{
+		"news": paginatedNews,
+		"pagination": map[string]interface{}{
+			"currentPage": pageInt,
+			"totalPages":  totalPages,
+			"totalItems":  totalItems,
+			"limit":       limitInt,
+			"hasNext":     pageInt < totalPages,
+			"hasPrev":     pageInt > 1,
+		},
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(news)
+	json.NewEncoder(w).Encode(response)
 }
 
 // Обработчик /api/refresh — запускает парсеры и обновляет БД

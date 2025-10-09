@@ -8,10 +8,13 @@ import json
 import pytz
 from pathlib import Path
 
-CHANNELS_TO_SUB = Path('mocks/channels_to_sub.json')
-CHANNELS = Path('mocks/channels.json')
-EXPORT = Path('mocks/export.json')
-TIME_PERIOD = Path('mocks/time_period.json')
+# Получаем абсолютный путь к директории скрипта
+script_dir = Path(__file__).parent.absolute()
+
+CHANNELS_TO_SUB = script_dir / 'mocks' / 'channels_to_sub.json'
+CHANNELS = script_dir / 'mocks' / 'channels.json'
+EXPORT = script_dir / 'mocks' / 'export.json'
+TIME_PERIOD = script_dir / 'mocks' / 'time_period.json'
 
 load_dotenv()
 # получаем api приложения
@@ -29,7 +32,7 @@ current_day = current_date.day
 moscow_tz = pytz.timezone('Europe/Moscow')
 
 # создаем юзербота
-client = TelegramClient('tg_session', api_id, api_hash, system_version='4.16.30-vxhello', device_model='Tecno TECNO CAMON 20 PRO')
+client = TelegramClient(script_dir / 'tg_session', api_id, api_hash, system_version='4.16.30-vxhello', device_model='Tecno TECNO CAMON 20 PRO')
 
 async def parse_channels(subbed_channels=[]):
     dialogs = await client.get_dialogs() # получаем множество диалогов
