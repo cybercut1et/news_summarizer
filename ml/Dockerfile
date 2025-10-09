@@ -15,4 +15,4 @@ RUN python -c "import nltk; nltk.download('punkt')"
 # Копируем Python скрипты
 COPY . .
 
-CMD ["python", "summarize.py"]
+CMD ["python", "scripts/main.py"]

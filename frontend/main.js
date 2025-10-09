@@ -68,19 +68,48 @@ document.addEventListener('DOMContentLoaded', () => {
 
     fetch('/api/news?' + params.toString())
       .then(r => { if (!r.ok) throw new Error('news fetch failed'); return r.json(); })
-      .then(news => { 
+      .then(data => { 
+        // Проверяем, загружаются ли данные
+        if (data.status === 'loading') {
+          // Показываем статус пайплайна и проверяем снова
+          updateLoadingStatus(data.pipeline_status || 'Обработка данных...');
+          setTimeout(() => loadNews(), 2000); // Проверяем каждые 2 секунды
+          return;
+        }
+        
         showLoading(false); 
-        if (Array.isArray(news) && news.length > 0) {
-          createMultipleNewsBlocks(news);
+        if (Array.isArray(data) && data.length > 0) {
+          createMultipleNewsBlocks(data);
         } else {
           const w = document.querySelector('.welcome');
           if (w) {
-            w.innerHTML = 'Новостей не найдено. Нажмите "Применить" для обновления.';
+            w.innerHTML = 'Новостей не найдено. Данные обрабатываются...';
             w.style.display = 'block';
           }
         }
       })
       .catch(err => { showLoading(false); console.error(err); alert('Ошибка при загрузке новостей'); });
+  }
+
+  function updateLoadingStatus(status) {
+    const loadingText = document.querySelector('.loading-text');
+    if (loadingText) {
+      loadingText.textContent = status;
+    }
+  }
+
+  function checkPipelineStatus() {
+    fetch('/api/pipeline/status')
+      .then(r => r.json())
+      .then(status => {
+        if (status.running) {
+          updateLoadingStatus(status.step || 'Обработка данных...');
+          setTimeout(() => checkPipelineStatus(), 1000);
+        } else if (status.dataReady) {
+          loadNews(); // Данные готовы, загружаем новости
+        }
+      })
+      .catch(err => console.error('Ошибка проверки статуса:', err));
   }
 
   if (apply) {
@@ -107,6 +136,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   updateAuthButton();
   
-  // Автозагрузка новостей при открытии страницы
-  setTimeout(() => loadNews(), 500);
+  // Проверяем статус пайплайна при загрузке страницы
+  setTimeout(() => checkPipelineStatus(), 500);
 });

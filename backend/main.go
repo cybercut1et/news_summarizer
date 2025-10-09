@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -20,17 +21,26 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// Глобальные переменные для отслеживания состояния пайплайна
+var (
+	pipelineRunning = false
+	pipelineStatus  = "ready" // ready, running, completed, error
+	pipelineStep    = ""
+	pipelineMutex   sync.RWMutex
+	dataReady       = false
+)
+
 // Структуры данных
 type NewsItem struct {
-	ID          int       `json:"id"`
-	Title       string    `json:"title"`
-	Content     string    `json:"content"`
-	Summary     string    `json:"summary"`
-	Source      string    `json:"source"`
-	URL         string    `json:"url"`
-	PublishedAt time.Time `json:"published_at"`
-	CreatedAt   time.Time `json:"created_at"`
-	Category    string    `json:"category"`
+	ID          int        `json:"id"`
+	Title       string     `json:"title"`
+	Content     string     `json:"content"`
+	Summary     string     `json:"summary"`
+	Source      string     `json:"source"`
+	URL         string     `json:"url"`
+	PublishedAt *time.Time `json:"published_at"`
+	CreatedAt   time.Time  `json:"created_at"`
+	Category    string     `json:"category"`
 }
 
 type User struct {
@@ -65,9 +75,132 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// API для получения статуса пайплайна
+func getPipelineStatus(w http.ResponseWriter, r *http.Request) {
+	pipelineMutex.RLock()
+	status := map[string]interface{}{
+		"running":   pipelineRunning,
+		"status":    pipelineStatus,
+		"step":      pipelineStep,
+		"dataReady": dataReady,
+	}
+	pipelineMutex.RUnlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(status)
+}
+
+// Автоматический пайплайн обработки новостей
+func runNewsPipeline() {
+	pipelineMutex.Lock()
+	pipelineRunning = true
+	pipelineStatus = "running"
+	dataReady = false
+	pipelineMutex.Unlock()
+
+	log.Printf("=== Начало пайплайна обработки новостей ===")
+	
+	// Получаем корневую директорию проекта
+	workingDir, _ := os.Getwd()
+	var projectRoot string
+	if strings.Contains(workingDir, "backend") {
+		projectRoot = filepath.Dir(workingDir)
+	} else {
+		projectRoot = workingDir
+	}
+	
+	// Шаг 1: Telegram парсер
+	setPipelineStep("Запуск Telegram парсера...")
+	log.Printf("Шаг 1: Запуск Telegram парсера...")
+	
+	tgParserDir := filepath.Join(projectRoot, "parser", "tg_parser")
+	cmd := exec.Command("python", "parser_prototype.py")
+	cmd.Dir = tgParserDir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("Ошибка TG парсера: %v, output: %s", err, string(output))
+	} else {
+		log.Printf("TG парсер выполнен успешно")
+	}
+	
+	// Шаг 2: Website парсер
+	setPipelineStep("Запуск Website парсера...")
+	log.Printf("Шаг 2: Запуск Website парсера...")
+	
+	websiteParserDir := filepath.Join(projectRoot, "parser", "website_parser")
+	if _, err := os.Stat(filepath.Join(websiteParserDir, "script.py")); err == nil {
+		cmd = exec.Command("python", "script.py")
+		cmd.Dir = websiteParserDir
+		output, err = cmd.CombinedOutput()
+		if err != nil {
+			log.Printf("Ошибка Website парсера: %v, output: %s", err, string(output))
+		} else {
+			log.Printf("Website парсер выполнен успешно")
+		}
+	} else {
+		log.Printf("Website парсер не найден, пропускаем")
+	}
+	
+	// Шаг 3: ML обработка
+	setPipelineStep("ML обработка и классификация...")
+	log.Printf("Шаг 3: Запуск ML обработки...")
+	
+	mlScriptDir := filepath.Join(projectRoot, "ml", "scripts")
+	cmd = exec.Command("python", "main.py")
+	cmd.Dir = mlScriptDir
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("Ошибка ML скрипта: %v, output: %s", err, string(output))
+		setPipelineStep("Ошибка ML обработки")
+		pipelineMutex.Lock()
+		pipelineStatus = "error"
+		pipelineRunning = false
+		pipelineMutex.Unlock()
+		return
+	} else {
+		log.Printf("ML скрипт выполнен успешно")
+	}
+	
+	// Шаг 4: Проверка готовности данных
+	setPipelineStep("Подготовка данных для отображения...")
+	log.Printf("Шаг 4: Проверка готовности данных...")
+	
+	filteredDataPath := filepath.Join(projectRoot, "ml", "filtered_data.json")
+	if _, err := os.Stat(filteredDataPath); err == nil {
+		log.Printf("Данные готовы для отображения")
+		
+		pipelineMutex.Lock()
+		pipelineStatus = "completed"
+		pipelineStep = "Готово! Данные загружены"
+		pipelineRunning = false
+		dataReady = true
+		pipelineMutex.Unlock()
+	} else {
+		log.Printf("Файл filtered_data.json не найден")
+		setPipelineStep("Ошибка: данные не готовы")
+		pipelineMutex.Lock()
+		pipelineStatus = "error"
+		pipelineRunning = false
+		pipelineMutex.Unlock()
+	}
+	
+	log.Printf("=== Пайплайн обработки новостей завершен ===")
+}
+
+// Вспомогательная функция для обновления статуса
+func setPipelineStep(step string) {
+	pipelineMutex.Lock()
+	pipelineStep = step
+	pipelineMutex.Unlock()
+}
+
 func main() {
 	// Инициализация БД
 	initDB()
+
+	// Запускаем пайплайн в фоне
+	log.Println("Запускаем автоматический пайплайн обработки новостей...")
+	go runNewsPipeline()
 
 	// Создание роутера
 	r := mux.NewRouter()
@@ -87,6 +220,9 @@ func main() {
 	api.HandleFunc("/news", getNews).Methods("GET")
 	api.HandleFunc("/news/{id}", getNewsItem).Methods("GET")
 	api.HandleFunc("/news", addNews).Methods("POST")
+
+	// Статус пайплайна
+	api.HandleFunc("/pipeline/status", getPipelineStatus).Methods("GET")
 
 	// ML эндпоинты
 	api.HandleFunc("/summarize", summarizeText).Methods("POST")
@@ -256,63 +392,136 @@ func getUserSources(w http.ResponseWriter, r *http.Request) {
 // Получение списка новостей
 func getNews(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Получен запрос на новости: %s", r.URL.String())
+	
+	// Проверяем готовность данных
+	pipelineMutex.RLock()
+	isDataReady := dataReady
+	currentStatus := pipelineStatus
+	pipelineMutex.RUnlock()
+	
+	if !isDataReady {
+		// Если данные не готовы, возвращаем статус пайплайна
+		response := map[string]interface{}{
+			"status": "loading",
+			"pipeline_status": currentStatus,
+			"message": "Данные обрабатываются, пожалуйста подождите",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	
+	// Данные готовы, читаем из filtered_data.json
+	workingDir, _ := os.Getwd()
+	var projectRoot string
+	if strings.Contains(workingDir, "backend") {
+		projectRoot = filepath.Dir(workingDir)
+	} else {
+		projectRoot = workingDir
+	}
+	
+	filteredDataPath := filepath.Join(projectRoot, "ml", "filtered_data.json")
+	
+	// Читаем файл
+	data, err := os.ReadFile(filteredDataPath)
+	if err != nil {
+		log.Printf("Ошибка чтения filtered_data.json: %v", err)
+		http.Error(w, "Данные не найдены", http.StatusNotFound)
+		return
+	}
+	
+	// Парсим JSON структуру filtered_data.json
+	type FilteredMessage struct {
+		Text       string  `json:"text"`
+		Date       string  `json:"date"`
+		Link       string  `json:"link"`
+		Category   string  `json:"category"`
+		Confidence float64 `json:"confidence"`
+	}
+	
+	type FilteredChannel struct {
+		ChannelName string            `json:"channel_name"`
+		Messages    []FilteredMessage `json:"messages"`
+	}
+	
+	var filteredData []FilteredChannel
+	if err := json.Unmarshal(data, &filteredData); err != nil {
+		log.Printf("Ошибка парсинга filtered_data.json: %v", err)
+		http.Error(w, "Ошибка обработки данных", http.StatusInternalServerError)
+		return
+	}
+	
+	// Получаем параметры запроса
 	limit := r.URL.Query().Get("limit")
 	if limit == "" {
 		limit = "20"
 	}
-	// Поддерживаем фильтр по множеству категорий через параметр categories=cat1,cat2
-	source := r.URL.Query().Get("source")
-	categoriesParam := r.URL.Query().Get("categories")
-
-	query := "SELECT id, title, content, summary, source, url, published_at, created_at, category FROM news WHERE 1=1"
-	args := []interface{}{}
-
-	if source != "" {
-		query += " AND source = ?"
-		args = append(args, source)
-	}
-
-	if categoriesParam != "" {
-		cats := strings.Split(categoriesParam, ",")
-		// Добавим placeholders для IN (...) 
-		placeholders := make([]string, 0, len(cats))
-		for _, c := range cats {
-			c = strings.TrimSpace(c)
-			if c == "" {
-				continue
-			}
-			placeholders = append(placeholders, "?")
-			args = append(args, c)
-		}
-		if len(placeholders) > 0 {
-			query += " AND category IN (" + strings.Join(placeholders, ",") + ")"
-		}
-	}
-
-	query += " ORDER BY published_at DESC LIMIT ?"
 	limitInt, _ := strconv.Atoi(limit)
-	args = append(args, limitInt)
-
-	rows, err := db.Query(query, args...)
-	if err != nil {
-		http.Error(w, "Ошибка получения новостей", http.StatusInternalServerError)
-		return
+	
+	categoriesParam := r.URL.Query().Get("categories")
+	var filterCategories []string
+	if categoriesParam != "" {
+		filterCategories = strings.Split(categoriesParam, ",")
+		for i := range filterCategories {
+			filterCategories[i] = strings.TrimSpace(filterCategories[i])
+		}
 	}
-	defer rows.Close()
-
+	
+	// Преобразуем в формат NewsItem
 	var news []NewsItem
-	for rows.Next() {
-		var item NewsItem
-		err := rows.Scan(&item.ID, &item.Title, &item.Content, &item.Summary,
-			&item.Source, &item.URL, &item.PublishedAt, &item.CreatedAt, &item.Category)
-		if err != nil {
-			continue
+	id := 1
+	
+	for _, channel := range filteredData {
+		for _, message := range channel.Messages {
+			// Фильтруем по категориям если указаны
+			if len(filterCategories) > 0 {
+				categoryMatch := false
+				for _, cat := range filterCategories {
+					if strings.EqualFold(message.Category, cat) {
+						categoryMatch = true
+						break
+					}
+				}
+				if !categoryMatch {
+					continue
+				}
+			}
+			
+			// Создаем NewsItem
+			item := NewsItem{
+				ID:       id,
+				Title:    fmt.Sprintf("Новость от %s", channel.ChannelName),
+				Content:  message.Text,
+				Summary:  message.Text,
+				Source:   channel.ChannelName,
+				URL:      message.Link,
+				Category: message.Category,
+			}
+			
+			// Пытаемся парсить дату
+			if message.Date != "" {
+				if parsed, err := time.Parse("15:04:05", message.Date); err == nil {
+					// Если только время, добавляем сегодняшнюю дату
+					today := time.Now().Format("2006-01-02")
+					fullTime := today + "T" + parsed.Format("15:04:05") + "Z"
+					if parsedFull, err := time.Parse(time.RFC3339, fullTime); err == nil {
+						item.PublishedAt = &parsedFull
+						item.CreatedAt = parsedFull
+					}
+				}
+			}
+			
+			news = append(news, item)
+			id++
+			
+			// Ограничиваем количество
+			if len(news) >= limitInt {
+				break
+			}
 		}
-		// Если есть summary — показываем в content (frontend ожидает выжимку)
-		if item.Summary != "" {
-			item.Content = item.Summary
+		if len(news) >= limitInt {
+			break
 		}
-		news = append(news, item)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -543,7 +752,7 @@ func callPythonSummarizer(content string, sentenceCount int, pythonPath string) 
 
 	mlScript := os.Getenv("ML_SCRIPT_PATH")
 	if mlScript == "" {
-		mlScript = filepath.Join("..", "ml", "summarize.py")
+		mlScript = filepath.Join("..", "ml", "scripts", "main.py")
 	}
 
 	// Позволим указать python интерпретатор, иначе попробуем 'python'

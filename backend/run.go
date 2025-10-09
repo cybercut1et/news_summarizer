@@ -17,7 +17,7 @@ func main() {
 	projectRoot := filepath.Dir(backendDir)
 
 	os.Setenv("DB_PATH", filepath.Join(backendDir, "news.db"))
-	os.Setenv("ML_SCRIPT_PATH", filepath.Join(projectRoot, "ml", "summarize.py"))
+	os.Setenv("ML_SCRIPT_PATH", filepath.Join(projectRoot, "ml", "scripts", "main.py"))
 	os.Setenv("PORT", "8081")
 
 	// Запускаем main.go
